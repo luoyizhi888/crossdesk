@@ -1,0 +1,138 @@
+name: Build Android (armeabi-v7a)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Android (armeabi-v7a)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    env:
+      XMAKE_MIN_VERSION: "3.1.1"
+      ANDROID_VERSION_NAME: "1.7.7"
+      ANDROID_VERSION_CODE: "5"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build pkg-config autoconf automake libtool nasm
+          python3 -m pip install --quiet setuptools wheel
+
+      - name: Select Android SDK directory
+        run: |
+          echo "ANDROID_HOME=${RUNNER_TEMP}/crossdesk-android-sdk" >> "${GITHUB_ENV}"
+          echo "ANDROID_SDK_ROOT=${RUNNER_TEMP}/crossdesk-android-sdk" >> "${GITHUB_ENV}"
+
+      - name: Restore Android SDK cache
+        id: android-sdk-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ env.ANDROID_HOME }}
+          key: ${{ runner.os }}-${{ runner.arch }}-crossdesk-v7a-android-sdk-api36-build36.0.0-ndk28.2.13676358
+
+      - name: Set up Android SDK
+        if: steps.android-sdk-cache.outputs.cache-hit != 'true'
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: "12266719"
+          log-accepted-android-sdk-licenses: false
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0 ndk;28.2.13676358"
+
+      - name: Save Android SDK cache
+        if: steps.android-sdk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.ANDROID_HOME }}
+          key: ${{ steps.android-sdk-cache.outputs.cache-primary-key }}
+
+      - name: Add Android tools to PATH
+        run: |
+          echo "${ANDROID_HOME}/cmdline-tools/16.0/bin" >> "${GITHUB_PATH}"
+          echo "${ANDROID_HOME}/platform-tools" >> "${GITHUB_PATH}"
+
+      - name: Install xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: ${{ env.XMAKE_MIN_VERSION }}
+          actions-cache-folder: .xmake-toolchain-cache
+          actions-cache-key: ${{ runner.os }}-${{ runner.arch }}-crossdesk-v7a-xmake${{ env.XMAKE_MIN_VERSION }}
+
+      - name: Restore native dependency cache
+        id: native-cache
+        uses: actions/cache@v5
+        with:
+          path: apps/android/.native/packages
+          key: ${{ runner.os }}-${{ runner.arch }}-crossdesk-v7a-native-packages-v1-ndk28.2.13676358-api26-xmake${{ env.XMAKE_MIN_VERSION }}
+
+      - name: Prepare native dependencies
+        run: python3 -B apps/android/scripts/build_native.py --configure-only
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Build APKs
+        working-directory: apps/android
+        run: |
+          ./gradlew --no-daemon --stacktrace \
+            -PcrossdeskVersionName="${ANDROID_VERSION_NAME}" \
+            -PcrossdeskVersionCode="${ANDROID_VERSION_CODE}" \
+            :app:assembleDebug :app:assembleRelease
+
+      - name: Check APK ABI
+        run: |
+          set -e
+          for APK in apps/android/app/build/outputs/apk/debug/app-debug.apk apps/android/app/build/outputs/apk/release/app-release-unsigned.apk; do
+            echo "== ${APK} =="
+            unzip -l "${APK}" | grep -E 'lib/armeabi-v7a/.*\.so$'
+            if unzip -l "${APK}" | grep -q 'lib/arm64-v8a/'; then
+              echo "::error::APK contains unexpected arm64 libraries: ${APK}"
+              exit 1
+            fi
+          done
+
+      - name: Package artifacts
+        run: |
+          out="${RUNNER_TEMP}/crossdesk-android-v7a"
+          mkdir -p "${out}/debug" "${out}/unsigned"
+          cp apps/android/app/build/outputs/apk/debug/app-debug.apk \
+             "${out}/debug/crossdesk-android-v7a-debug-1.7.7-20261124.apk"
+          cp apps/android/app/build/outputs/apk/release/app-release-unsigned.apk \
+             "${out}/unsigned/crossdesk-android-v7a-unsigned-1.7.7-20261124.apk"
+
+      - name: Upload Debug APK (可直接安装)
+        uses: actions/upload-artifact@v6
+        with:
+          name: crossdesk-android-v7a-debug-1.7.7
+          path: ${{ runner.temp }}/crossdesk-android-v7a/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload unsigned Release APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: crossdesk-android-v7a-unsigned-1.7.7
+          path: ${{ runner.temp }}/crossdesk-android-v7a/unsigned/*.apk
+          if-no-files-found: error
