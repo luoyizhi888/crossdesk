@@ -10,7 +10,7 @@ android {
         targetSdk = 36
         versionCode = providers.gradleProperty('crossdeskVersionCode').get().toInteger()
         versionName = providers.gradleProperty('crossdeskVersionName').get()
-        ndk { abiFilters 'arm64-v8a' }
+        ndk { abiFilters 'armeabi-v7a' }
         testInstrumentationRunner = 'androidx.test.runner.AndroidJUnitRunner'
     }
     compileOptions {
