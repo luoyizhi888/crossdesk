@@ -3,6 +3,10 @@ set_xmakever("3.1.1")
 set_languages("c++17")
 add_rules("mode.release", "mode.debug")
 set_policy("package.precompiled", false)
+-- Use the host Python provided by the environment for Meson instead of building
+-- Python from source; the strict library dependency policy would otherwise try
+-- to rebuild system Python (same approach as the iOS branch of MiniRTC).
+add_requireconfs("**.python", {system = true})
 add_cxflags("-fPIC")
 includes("../../../deps/submodules/minirtc")
 add_requires("openssl3 3.3.2", {system = false, configs = {shared = false}})
