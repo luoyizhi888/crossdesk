@@ -44,7 +44,7 @@ def main(configure_only=False):
     work = ANDROID / 'native'
     # Use the desktop repository policy; Xmake manages recipe initialization
     # and updates. Only installed Android packages/build products are isolated.
-    subprocess.run([xmake, 'f', '-P', str(work), '-y', '-p', 'android', '-a', 'arm64-v8a',
+    subprocess.run([xmake, 'f', '-P', str(work), '-y', '-p', 'android', '-a', 'armeabi-v7a',
                     '-m', 'release', '--ndk=' + str(ndk), '--ndk_sdkver=26',
                     '--runtimes=c++_static',
                     '--policies=package.precompiled:n,package.librarydeps.strict_compatibility',
