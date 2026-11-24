@@ -23,6 +23,21 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
+      - name: Patch openssl recipe for armeabi-v7a
+        run: |
+          f=deps/submodules/minirtc/thirdparty/openssl/xmake.lua
+          sed -i 's/local configs = {"linux-aarch64", "no-shared"/local configs = {"linux-armv4", "no-shared"/' "$f"
+          grep -n 'linux-armv4' "$f"
+
+      - name: Add swap and show disk
+        run: |
+          sudo fallocate -l 10G /mnt/swapfile
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
+          free -h
+          df -h / /mnt
+
       - name: Set up Java
         uses: actions/setup-java@v5
         with:
@@ -88,6 +103,22 @@ jobs:
 
       - name: Prepare native dependencies
         run: python3 -B apps/android/scripts/build_native.py --configure-only
+
+      - name: Collect xmake failure logs
+        if: failure()
+        run: |
+          mkdir -p xmake-failure-logs
+          find /home/runner/.xmake/cache/packages -path '*installdir.failed*' -name 'install.txt' -exec cp --parents {} xmake-failure-logs/ \; || true
+          find apps/android/.native -path '*failed*' -name 'install.txt' -exec cp --parents {} xmake-failure-logs/ \; || true
+          find apps/android/.native -maxdepth 4 -type f -name '*.log' -exec cp --parents {} xmake-failure-logs/ \; || true
+
+      - name: Upload xmake failure logs
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: xmake-failure-logs
+          path: xmake-failure-logs
+          if-no-files-found: ignore
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
