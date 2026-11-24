@@ -26,7 +26,7 @@ jobs:
       - name: Patch openssl recipe for armeabi-v7a
         run: |
           f=deps/submodules/minirtc/thirdparty/openssl/xmake.lua
-          sed -i 's/local configs = {"linux-aarch64", "no-shared"/local configs = {"linux-armv4", "no-shared"/' "$f"
+          sed -i 's/local configs = {"linux-aarch64", "no-shared"/local configs = {"linux-armv4", "no-shared", "no-asm"/' "$f"
           grep -n 'linux-armv4' "$f"
 
       - name: Add swap and show disk
